@@ -1,0 +1,56 @@
+# Bloomberg pull + model configuration.
+# Tickers marked VERIFY are my best guess: check them in the Terminal
+# (type the ticker <GO>, or use SECF / ALLQ) before the first full pull.
+# fetch_bloomberg.py --check prints which ones resolve.
+
+start_date: "2010-01-01"
+end_date: null            # null = today
+
+universe:
+  issuer_ticker: "FRTR"   # OATs (and BTANs pre-2023 under the same ticker)
+  # Bloomberg's govtList only returns LIVE bonds. For matured OATs back to 2010,
+  # export ISINs from the Terminal: SRCH <GO> -> Ticker FRTR, include matured,
+  # Coupon type FIXED, export -> save ISIN column to data/oat_isins_extra.csv
+  extra_isin_file: "data/oat_isins_extra.csv"
+  pricing_source: "BGN"   # BGN (generic composite) or CBBT; null = default
+  min_ttm_years: 1.0      # drop bonds with < 1Y left (money-market noise)
+  max_ttm_years: 50.0
+  min_age_days: 30        # drop freshly issued lines (new-issue premium)
+
+rates:
+  estr_fixing: "ESTRON Index"
+  eonia_fixing: "EONIA Index"
+  # €STR OIS par rates. Bloomberg letter code: A=1M C=3M F=6M I=9M, digits = years.
+  estr_ois_prefix: "EESWE"      # VERIFY
+  eonia_ois_prefix: "EUSWE"     # used before €STR OIS history starts (EONIA = €STR + 8.5bp)
+  ois_tenors: ["A", "C", "F", "I", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12", "15", "20", "25", "30", "40", "50"]
+  ois_suffix: " Curncy"
+  eonia_estr_spread: 0.00085
+
+cds:
+  # France sovereign CDS (USD, CR14 doc clause). EUR-denominated quotes exist but are thinner.
+  tickers:                       # VERIFY
+    1: "FRTR CDS USD SR 1Y D14 Corp"
+    3: "FRTR CDS USD SR 3Y D14 Corp"
+    5: "FRTR CDS USD SR 5Y D14 Corp"
+    7: "FRTR CDS USD SR 7Y D14 Corp"
+    10: "FRTR CDS USD SR 10Y D14 Corp"
+  field: "PX_LAST"               # quoted spread in bp
+
+repo:
+  # French GC repo. Candidates: RepoFunds Rate France (BrokerTec) and the
+  # 1W general collateral fixing. VERIFY: search "France GC repo" in SECF.
+  gc_tickers:
+    rfr_france: "RPFRGC Index"   # VERIFY
+  field: "PX_LAST"
+
+bunds:
+  generic_yields: ["GDBR2 Index", "GDBR5 Index", "GDBR10 Index", "GDBR30 Index"]
+  oat_generic_yields: ["GFRN2 Index", "GFRN5 Index", "GFRN10 Index", "GFRN30 Index"]
+
+model:
+  recovery: 0.40
+  hazard_knots: [0.0, 3.0, 7.0]  # lambda buckets 0-3Y, 3-7Y, 7Y+
+  allow_negative_lambda: true    # show the QE breakdown instead of hiding it at 0
+  funding_adjustment: false      # true: discount at €STR + (GC - €STR)
+  frequency: "W-FRI"             # fit frequency for the history run: "B" daily, "W-FRI" weekly

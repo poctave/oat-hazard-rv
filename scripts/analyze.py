@@ -84,16 +84,12 @@ def long_short(df, col):
     return p.mean(), (p.mean() / p.std() if p.std() > 0 else np.nan), len(p)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--tag", default="R40")
-    ap.add_argument("--horizon", type=int, default=1, help="periods ahead (1 = next fit date)")
-    args = ap.parse_args()
-    out = ROOT / "results" / args.tag
+def compute(out: Path, horizon: int = 1):
+    """Returns (fits, signals, fit_quality_table, signal_table)."""
     fits = pd.read_parquet(out / "fits.parquet")
     sig = pd.read_parquet(out / "signals.parquet")
     for col in SIGNALS:
-        sig = add_forward(sig, col, args.horizon)
+        sig = add_forward(sig, col, horizon)
 
     rows = []
     for reg, df in regime_slices(sig):
@@ -116,7 +112,10 @@ def main():
                    "share_breakdown": df["breakdown"].mean(),
                    "mean_cds5_impl": df["cds_impl_5y"].mean(), "mean_cds5_mkt": df["cds_mkt_5y"].mean()})
     fq = pd.DataFrame(fq)
+    return fits, sig, fq, tab
 
+
+def charts(f: pd.DataFrame, sig: pd.DataFrame, out: Path):
     # ---------------- charts
     fig, ax = plt.subplots(3, 1, figsize=(11, 10), sharex=True)
     for j, lab in enumerate(["0-3Y", "3-7Y", "7Y+"]):
@@ -146,6 +145,15 @@ def main():
         a.set_title(f"{SIGNALS[col]} on {last:%Y-%m-%d}")
     fig.colorbar(sc, ax=ax, label="coupon %"); fig.savefig(out / "snapshot.png", dpi=130); plt.close(fig)
 
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tag", default="R40")
+    ap.add_argument("--horizon", type=int, default=1, help="periods ahead (1 = next fit date)")
+    args = ap.parse_args()
+    out = ROOT / "results" / args.tag
+    f, sig, fq, tab = compute(out, args.horizon)
+    charts(f, sig, out)
     md = [f"# Results: {args.tag}\n", f"Horizon: {args.horizon} period(s). Signal > 0 = cheap.\n",
           "## Fit quality\n", fq.round(3).to_markdown(index=False), "\n\n## Signal comparison\n",
           tab.round(3).to_markdown(index=False), "\n\n![history](hazard_history.png)\n\n![snapshot](snapshot.png)\n"]

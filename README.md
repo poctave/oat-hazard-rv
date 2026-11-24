@@ -90,3 +90,14 @@ Bloomberg data stays local (`data/` is git-ignored): Bloomberg's terms do not al
 2. Extend to BTPs and Bonos (wider spreads, where the coupon effect should be stronger).
 3. Explain residuals with bond-specific factors (amount outstanding, age, repo specialness proxy).
 4. Proper backtest with carry/roll and bid-ask.
+
+## Result sheet (LaTeX)
+
+```bash
+python scripts/make_report.py --tag R40 --compare R40_funding
+# synthetic: python scripts/make_report.py --tag synth --compare synth_funding --raw data/synthetic --synthetic
+```
+
+Writes `reports/<tag>/results.tex` (+ `results.pdf` if pdflatex is installed) with: market inputs and the
+full OAT cross-section on the last date (also as `data_snapshot.csv`), fitted hazard curve, implied vs traded
+CDS, fit quality by regime, funding-adjusted comparison, and the signal comparison table.

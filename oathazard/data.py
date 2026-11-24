@@ -33,7 +33,18 @@ class RawData:
         self.clean = px.pivot_table(index="date", columns="isin", values="PX_LAST").sort_index()
         self.bbg_yield = (px.pivot_table(index="date", columns="isin", values="YLD_YTM_MID").sort_index()
                           if "YLD_YTM_MID" in px else None)
-        md = pd.read_parquet(raw_dir / "market.parquet")
+        md = pd.read_parquet(raw_dir / "market.parquet")[["date", "name", "PX_LAST"]]
+        extra = raw_dir / "extra"
+        parts = [md]
+        if (extra / "market_extra.parquet").exists():
+            parts.append(pd.read_parquet(extra / "market_extra.parquet")[["date", "name", "PX_LAST"]])
+        if (extra / "discovered.parquet").exists():
+            dsc = pd.read_parquet(extra / "discovered.parquet")
+            # euro GC repo proxy: STOXX GC Pooling EUR overnight (ECB basket), daily since 2010
+            gc = dsc[dsc["security"] == "SGCPON Index"][["date", "PX_LAST"]].assign(name="repo_gc_pooling_on")
+            parts.append(gc)
+            parts.append(dsc[["date", "security", "PX_LAST"]].rename(columns={"security": "name"}))
+        md = pd.concat(parts, ignore_index=True)
         self.mkt = md.pivot_table(index="date", columns="name", values="PX_LAST").sort_index()
         self.bonds = {i: Bond(i, r.coupon, pd.Timestamp(r.maturity), pd.Timestamp(r.issue), str(r.name))
                       for i, r in self.static.iterrows()}
@@ -78,9 +89,13 @@ class RawData:
             v = r.get("eonia_fixing", np.nan) - self.cfg["rates"]["eonia_estr_spread"] * 100
         return v / 100.0
 
-    def funding_spread(self, date) -> float:
-        """GC repo minus €STR (decimal). NaN if no repo data."""
+    def funding_spread(self, date, source: str = "gc") -> float:
+        """Funding rate minus €STR (decimal). source='gc': GC repo series (GC Pooling ON if present);
+        source='btf3m': French 3M BTF bill yield (collateral-scarcity proxy). NaN if unavailable."""
         r = self._row(date)
+        if source == "btf3m":
+            v = r.get("GBTF3MO Index", np.nan)
+            return v / 100.0 - self.overnight(date) if np.isfinite(v) else np.nan
         cols = sorted((c for c in r.index if str(c).startswith("repo_")), key=lambda c: "_gc" not in str(c))
         vals = [r[c] for c in cols if np.isfinite(r[c])]
         if not vals:
@@ -89,7 +104,9 @@ class RawData:
 
     def market_cds(self, date) -> dict[int, float]:
         r = self._row(date)
-        return {int(c[4:-1]): r[c] for c in r.index if str(c).startswith("cds_") and np.isfinite(r[c])}
+        import re
+        return {int(m.group(1)): r[c] for c in r.index
+                if (m := re.fullmatch(r"cds_(\d+)y", str(c))) and np.isfinite(r[c])}
 
     # ---------------------------------------------------------------- bonds
     def cross_section(self, date, settle):

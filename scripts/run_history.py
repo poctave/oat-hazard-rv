@@ -33,7 +33,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(ROOT / "config.yaml"))
     ap.add_argument("--raw", default=str(ROOT / "data" / "raw"))
-    ap.add_argument("--funding", action="store_true", help="apply GC - €STR funding adjustment")
+    ap.add_argument("--funding", action="store_true", help="apply funding adjustment (rate - €STR)")
+    ap.add_argument("--funding-src", default="gc", choices=["gc", "btf3m"], help="gc: GC Pooling ON; btf3m: French 3M bills")
     ap.add_argument("--freq", default=None, help="override model.frequency (B, W-FRI, ...)")
     ap.add_argument("--recovery", default=None, help="fixed recovery (e.g. 0.4) or 'fit' to estimate it each date")
     ap.add_argument("--tag", default=None, help="output sub-folder name")
@@ -67,7 +68,7 @@ def main():
             curve, curve_src = data.ois_curve(d)
         except ValueError:
             continue
-        fs = data.funding_spread(d)
+        fs = data.funding_spread(d, args.funding_src)
         if funding and np.isfinite(fs):
             curve = curve.shifted(fs)
         if args.base == "bund":

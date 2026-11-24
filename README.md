@@ -72,6 +72,21 @@ On synthetic data (true recovery 40%, GC far below €STR under QE), the plain f
 | French GC repo | BDH | funding adjustment |
 | Bund and OAT generic yields | BDH | benchmark |
 
+Second pull (`scripts/fetch_extra.py`, 24 Nov 2026):
+
+| Item | Coverage | Use |
+|---|---|---|
+| OAT bid/ask, bid/ask yields, Bloomberg Z-spread and ASW (all 117 OATs, daily) | 2010-2026 | transaction costs, validation of own Z-spread |
+| Bunds DBR/OBL/BKO (218 bonds), BTPs (235, semi-annual), Bonos (127): static + PX_LAST/BID/ASK/YLD | 2010-2026 | Germany baseline, cross-country extension |
+| STOXX GC Pooling EUR (ON, TN, 1W-12M), French BTF bills 1M-1Y, €STR compounded, Bubill indices | 2010-2026 | funding / collateral-scarcity proxies |
+| ECB DFR/MRO, Euribor 3M/6M, EUR 6M swaps 2-30Y | 2010-2026 | policy regime, asset-swap curve |
+| Generic yields FR 7/15/20, DE 7/15/20, IT and ES 2/5/10/30 | 2010-2026 | curve benchmarks |
+| Sovereign CDS USD 5/10Y Germany, Italy, Spain, Belgium, Netherlands; France 2/4/20/30Y, EUR 1/2Y | varies | CDS-bond basis, cross-country |
+| iTraxx Main / Crossover, V2X, VIX, MOVE, SX5E, CAC, futures OAT/Bund/Bobl/Buxl/BTP | 2010-2026 | stress regimes, controls |
+
+Not available on the Dauphine terminal: French GC repo history (RepoFunds Rate France, broker GC series: not entitled), per-bond repo/specialness, ECB holdings per ISIN.
+GC Pooling (ECB basket) sits within a few bp of €STR, so it does not capture OAT scarcity; `--funding --funding-src btf3m` uses 3M BTF minus €STR instead.
+
 Bloomberg data stays local (`data/` is git-ignored): Bloomberg's terms do not allow republishing it.
 
 ## Simplifications (v1) and known limits

@@ -98,8 +98,8 @@ class FitResult:
     breakdown: bool             # True if fit wants lambda < 0 (survival > 100%)
 
 
-def fit_hazard(cs: CrossSection, recovery: float = 0.40, knots=DEFAULT_KNOTS,
-               allow_negative: bool = True, x0=None) -> FitResult:
+def fit_hazard(cs: CrossSection, recovery: float | None = 0.40, knots=DEFAULT_KNOTS,
+               allow_negative: bool = True, x0=None, rec_bounds=(0.0, 0.6)) -> FitResult:
     """Global fit of one piecewise-constant hazard curve to all bonds.
 
     Objective: duration-scaled price errors = approx. yield errors, so long bonds
@@ -107,22 +107,30 @@ def fit_hazard(cs: CrossSection, recovery: float = 0.40, knots=DEFAULT_KNOTS,
     breakdown (lambda < 0) is visible instead of being hidden by a bound.
     """
     k = len(knots)
-    x0 = np.full(k, 0.005) if x0 is None else np.asarray(x0, float)
+    fit_r = recovery is None
+    x0 = np.full(k, 0.005) if x0 is None else np.asarray(x0, float)[:k]
+    if len(x0) < k:
+        x0 = np.r_[x0, np.full(k - len(x0), 0.005)]
     lb = -0.05 if allow_negative else 0.0
+    lo, hi = np.full(k, lb), np.full(k, 1.0)
+    if fit_r:
+        x0 = np.r_[x0, 0.3]; lo = np.r_[lo, rec_bounds[0]]; hi = np.r_[hi, rec_bounds[1]]
 
     def resid(x):
-        hc = HazardCurve(tuple(knots), x)
-        pm = cs.model_prices(hc, recovery)
+        hc = HazardCurve(tuple(knots), x[:k])
+        pm = cs.model_prices(hc, x[k] if fit_r else recovery)
         return (pm - cs.dirty) / (cs.dirty * cs.mdur) * 1e4  # bp
 
-    sol = least_squares(resid, x0, bounds=(np.full(k, lb), np.full(k, 1.0)), xtol=1e-12, ftol=1e-12)
-    hc = HazardCurve(tuple(knots), sol.x)
+    sol = least_squares(resid, np.clip(x0, lo + 1e-9, hi - 1e-9), bounds=(lo, hi), xtol=1e-12, ftol=1e-12)
+    if fit_r:
+        recovery = float(sol.x[k])
+    hc = HazardCurve(tuple(knots), sol.x[:k])
     # exact yield residuals
     pm = cs.model_prices(hc, recovery)
     y_model = np.array([b.yield_from_price(p, cs.settle) for b, p in zip(cs.bonds, pm)])
     r = (cs.ytm - y_model) * 1e4
     return FitResult(hc, recovery, r, float(np.sqrt(np.mean(r ** 2))), bool(sol.success),
-                     bool(np.any(sol.x < 0)))
+                     bool(np.any(sol.x[:k] < 0)))
 
 
 def zspread_rv(cs: CrossSection, degree: int = 3):

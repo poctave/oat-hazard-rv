@@ -153,6 +153,8 @@ def market_tickers(cfg) -> dict[str, str]:
         out[f"eonia_ois_{t}"] = tk
     for y, tk in cfg["cds"]["tickers"].items():
         out[f"cds_{y}y"] = tk
+    for y, tk in cfg["cds"].get("eur_tickers", {}).items():
+        out[f"cdseur_{y}y"] = tk
     for name, tk in cfg["repo"]["gc_tickers"].items():
         out[f"repo_{name}"] = tk
     for tk in cfg["bunds"]["generic_yields"] + cfg["bunds"]["oat_generic_yields"]:
@@ -213,6 +215,7 @@ def main():
     keep = static[(static["CPN_TYP"].astype(str).str.upper().str.startswith("FIXED"))
                   & (static["INFLATION_LINKED_INDICATOR"].astype(str).str.upper() != "Y")
                   & (static["CPN_FREQ"].astype(float) == 1)]
+    keep = keep[pd.to_datetime(keep["MATURITY"]) > pd.Timestamp(cfg["start_date"]) + pd.DateOffset(years=1)]
     keep.to_parquet(RAW / "oat_static.parquet")
     print(f"  kept {len(keep)} fixed-coupon nominal annual bonds out of {len(static)}")
 
@@ -235,6 +238,16 @@ def main():
     px, err = bbg.bdh(list(px_secs), PRICE_FIELDS, start, end)
     _report("prices", err)
     px["isin"] = px["security"].map(px_secs)
+    got = set(px["isin"].dropna().unique()) if not px.empty else set()
+    missing = [i for i in px_secs.values() if i not in got]
+    if src and missing:
+        print(f"  {len(missing)} bonds had no {src} prices, retrying with default source")
+        alt = {bond_security(i, None): i for i in missing}
+        px2, err2 = bbg.bdh(list(alt), PRICE_FIELDS, start, end)
+        _report("prices (default source)", err2)
+        if not px2.empty:
+            px2["isin"] = px2["security"].map(alt)
+            px = pd.concat([px, px2], ignore_index=True)
     px.to_parquet(RAW / "oat_prices.parquet")
 
     # 4) rates, CDS, repo, Bunds

@@ -57,6 +57,20 @@ class RawData:
                 return bootstrap_ois(pts), label
         raise ValueError(f"no usable OIS curve on {date:%Y-%m-%d}")
 
+    def bund_spread_fn(self, date, curve: DiscountCurve):
+        """Bund generic yield minus €STR OIS zero (cc), interpolated in maturity, flat outside 2-30Y.
+        Used to move the risk-free curve to Germany, so lambda measures France-vs-Germany credit."""
+        r = self._row(date)
+        T, s = [], []
+        for name, t in (("GDBR2", 2.0), ("GDBR5", 5.0), ("GDBR10", 10.0), ("GDBR30", 30.0)):
+            v = r.get(name, np.nan)
+            if np.isfinite(v):
+                T.append(t); s.append(np.log1p(v / 100.0) - float(curve.zero(t)))
+        if len(T) < 2:
+            return None
+        T, s = np.array(T), np.array(s)
+        return lambda t: np.interp(np.asarray(t, float), T, s)
+
     def overnight(self, date) -> float:
         r = self._row(date)
         v = r.get("estr_fixing", np.nan)
@@ -67,7 +81,7 @@ class RawData:
     def funding_spread(self, date) -> float:
         """GC repo minus €STR (decimal). NaN if no repo data."""
         r = self._row(date)
-        cols = [c for c in r.index if str(c).startswith("repo_")]
+        cols = sorted((c for c in r.index if str(c).startswith("repo_")), key=lambda c: "_gc" not in str(c))
         vals = [r[c] for c in cols if np.isfinite(r[c])]
         if not vals:
             return np.nan

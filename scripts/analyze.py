@@ -118,7 +118,9 @@ def compute(out: Path, horizon: int = 1):
 def charts(f: pd.DataFrame, sig: pd.DataFrame, out: Path):
     # ---------------- charts
     fig, ax = plt.subplots(3, 1, figsize=(11, 10), sharex=True)
-    for j, lab in enumerate(["0-3Y", "3-7Y", "7Y+"]):
+    kn = [float(k) for k in str(f["knots"].iloc[0]).split(",")] if "knots" in f else [0, 3, 7]
+    labs = [f"{a:g}-{b:g}Y" for a, b in zip(kn[:-1], kn[1:])] + [f"{kn[-1]:g}Y+"]
+    for j, lab in enumerate(labs):
         if f"lambda_{j}" in f:
             ax[0].plot(f["date"], f[f"lambda_{j}"] * 1e4, label=f"lambda {lab}")
     ax[0].axhline(0, color="k", lw=0.8)

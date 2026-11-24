@@ -35,16 +35,20 @@ def main():
     ap.add_argument("--raw", default=str(ROOT / "data" / "raw"))
     ap.add_argument("--funding", action="store_true", help="apply GC - €STR funding adjustment")
     ap.add_argument("--freq", default=None, help="override model.frequency (B, W-FRI, ...)")
-    ap.add_argument("--recovery", type=float, default=None)
+    ap.add_argument("--recovery", default=None, help="fixed recovery (e.g. 0.4) or 'fit' to estimate it each date")
     ap.add_argument("--tag", default=None, help="output sub-folder name")
+    ap.add_argument("--base", default="ois", choices=["ois", "bund"],
+                    help="risk-free curve: €STR OIS (default) or Bund (France-vs-Germany credit)")
+    ap.add_argument("--knots", default=None, help="hazard bucket edges, e.g. 0,3,7,15,30")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config))
     m = cfg["model"]
-    recovery = args.recovery if args.recovery is not None else m["recovery"]
+    fit_rec = args.recovery == "fit"
+    recovery = None if fit_rec else (float(args.recovery) if args.recovery is not None else m["recovery"])
     funding = args.funding or m["funding_adjustment"]
-    knots = tuple(m["hazard_knots"])
-    tag = args.tag or f"R{int(recovery * 100)}{'_funding' if funding else ''}"
+    knots = tuple(float(k) for k in args.knots.split(",")) if args.knots else tuple(m["hazard_knots"])
+    tag = args.tag or f"{'Rfit' if fit_rec else f'R{int(recovery * 100)}'}{'_funding' if funding else ''}"
     out = ROOT / "results" / tag
     out.mkdir(parents=True, exist_ok=True)
 
@@ -66,22 +70,31 @@ def main():
         fs = data.funding_spread(d)
         if funding and np.isfinite(fs):
             curve = curve.shifted(fs)
+        if args.base == "bund":
+            fn = data.bund_spread_fn(d, curve)
+            if fn is None:
+                continue
+            curve = curve.shifted_term(fn)
+            curve_src += "+Bund"
         bonds, dirty = data.cross_section(d, settle)
         if len(bonds) < len(knots) + 3:
             continue
         cs = CrossSection(bonds, dirty, settle, curve)
         res = fit_hazard(cs, recovery, knots, m["allow_negative_lambda"], x0)
         x0 = res.hazard.lambdas
+        rec_d = res.recovery
         z, zres = zspread_rv(cs)
 
         row = {"date": d, "n_bonds": cs.n, "rmse_bp": res.rmse_bp, "breakdown": res.breakdown,
                "success": res.success, "curve_src": curve_src, "funding_spread_bp": fs * 1e4,
                "ois_10y_zero": float(curve.zero(10.0))}
+        row["recovery"] = res.recovery
+        row["knots"] = ",".join(f"{k:g}" for k in knots)
         for j, lam in enumerate(res.hazard.lambdas):
             row[f"lambda_{j}"] = lam
         mk = data.market_cds(d)
         for T in CDS_TENORS:
-            row[f"cds_impl_{T}y"] = cds_par_spread(res.hazard, curve, recovery, T) * 1e4
+            row[f"cds_impl_{T}y"] = cds_par_spread(res.hazard, curve, rec_d, T) * 1e4
             row[f"cds_mkt_{T}y"] = mk.get(T, np.nan)
         fits.append(row)
         for b, p, y, md_, rr, zz, zr, T in zip(bonds, dirty, cs.ytm, cs.mdur, res.resid_bp, z, zres, cs.ttm):

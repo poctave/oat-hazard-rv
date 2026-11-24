@@ -48,6 +48,12 @@ class DiscountCurve:
         dfs = np.exp(self.log_dfs) * np.exp(-spread * self.times)
         return DiscountCurve(self.times.copy(), dfs)
 
+    def shifted_term(self, spread_fn) -> "DiscountCurve":
+        """Shift cc zero rates by a maturity-dependent spread s(T) (decimal)."""
+        t = np.unique(np.r_[self.times, np.arange(0.25, 60.01, 0.25)])
+        z = self.zero(t) + spread_fn(t)
+        return DiscountCurve(t, np.exp(-z * t))
+
     @classmethod
     def flat(cls, rate_cc: float, max_t: float = 60.0) -> "DiscountCurve":
         t = np.linspace(0, max_t, 121)

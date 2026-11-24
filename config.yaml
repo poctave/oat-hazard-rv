@@ -8,9 +8,8 @@ end_date: null            # null = today
 
 universe:
   issuer_ticker: "FRTR"   # OATs (and BTANs pre-2023 under the same ticker)
-  # Bloomberg's govtList only returns LIVE bonds. For matured OATs back to 2010,
-  # export ISINs from the Terminal: SRCH <GO> -> Ticker FRTR, include matured,
-  # Coupon type FIXED, export -> save ISIN column to data/oat_isins_extra.csv
+  # govtList FRTR returns live AND matured lines (373 on 2026-11-24, back to 1996).
+  # Optional extra ISINs (e.g. from a SRCH export) can still be added here:
   extra_isin_file: "data/oat_isins_extra.csv"
   pricing_source: "BGN"   # BGN (generic composite) or CBBT; null = default
   min_ttm_years: 1.0      # drop bonds with < 1Y left (money-market noise)
@@ -21,7 +20,7 @@ rates:
   estr_fixing: "ESTRON Index"
   eonia_fixing: "EONIA Index"
   # €STR OIS par rates. Bloomberg letter code: A=1M C=3M F=6M I=9M, digits = years.
-  estr_ois_prefix: "EESWE"      # VERIFY
+  estr_ois_prefix: "EESWE"      # verified
   eonia_ois_prefix: "EUSWE"     # used before €STR OIS history starts (EONIA = €STR + 8.5bp)
   ois_tenors: ["A", "C", "F", "I", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12", "15", "20", "25", "30", "40", "50"]
   ois_suffix: " Curncy"
@@ -29,19 +28,23 @@ rates:
 
 cds:
   # France sovereign CDS (USD, CR14 doc clause). EUR-denominated quotes exist but are thinner.
-  tickers:                       # VERIFY
-    1: "FRTR CDS USD SR 1Y D14 Corp"
-    3: "FRTR CDS USD SR 3Y D14 Corp"
-    5: "FRTR CDS USD SR 5Y D14 Corp"
-    7: "FRTR CDS USD SR 7Y D14 Corp"
-    10: "FRTR CDS USD SR 10Y D14 Corp"
+  tickers:                       # verified 2026-11-24
+    1: "FRANCE CDS USD SR 1Y D14 Corp"
+    3: "FRANCE CDS USD SR 3Y D14 Corp"
+    5: "FRANCE CDS USD SR 5Y D14 Corp"
+    7: "FRANCE CDS USD SR 7Y D14 Corp"
+    10: "FRANCE CDS USD SR 10Y D14 Corp"
+  eur_tickers:                   # EUR-denominated quotes, thinner history
+    5: "FRANCE CDS EUR SR 5Y D14 Corp"
+    10: "FRANCE CDS EUR SR 10Y D14 Corp"
   field: "PX_LAST"               # quoted spread in bp
 
 repo:
   # French GC repo. Candidates: RepoFunds Rate France (BrokerTec) and the
   # 1W general collateral fixing. VERIFY: search "France GC repo" in SECF.
   gc_tickers:
-    rfr_france: "RPFRGC Index"   # VERIFY
+    rfr_france_gc: "REFRGCFR Index"   # RepoFunds Rate France - GC (verified)
+    rfr_france: "REFRFR Index"        # RepoFunds Rate France, all (fallback)
   field: "PX_LAST"
 
 bunds:

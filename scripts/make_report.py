@@ -50,19 +50,22 @@ def fmt(v, nd=2):
     return esc(v)
 
 
-def table(df: pd.DataFrame, caption: str, nd=2, align=None, small=False) -> str:
+def table(df: pd.DataFrame, caption: str, nd=2, align=None, small=False, fit=False) -> str:
     cols = list(df.columns)
     align = align or ("l" + "r" * (len(cols) - 1))
     head = " & ".join(rf"\textbf{{{esc(c)}}}" for c in cols)
     body = "\n".join(" & ".join(fmt(v, nd) for v in row) + r" \\" for row in df.itertuples(index=False))
     size = r"\footnotesize" if small else r"\small"
-    return (rf"""\begin{{table}}[H]\centering{size}
-\caption{{{caption}}}
-\begin{{tabular}}{{{align}}}\toprule
+    tab = rf"""\begin{{tabular}}{{{align}}}\toprule
 {head} \\ \midrule
 {body}
-\bottomrule\end{{tabular}}\end{{table}}
-""")
+\bottomrule\end{{tabular}}"""
+    if fit:
+        tab = r"\resizebox{\linewidth}{!}{" + tab + "}"
+    return rf"""\begin{{table}}[H]\centering{size}
+\caption{{{caption}}}
+{tab}\end{{table}}
+"""
 
 
 # ------------------------------------------------------------------ data section
@@ -125,6 +128,8 @@ def main():
     ap.add_argument("--config", default=str(ROOT / "config.yaml"))
     ap.add_argument("--synthetic", action="store_true", help="stamp the sheet as synthetic data")
     ap.add_argument("--horizon", type=int, default=1)
+    ap.add_argument("--extra", default="", help="comma-separated extra runs for the sensitivity table")
+    ap.add_argument("--note", default="", help="free text (LaTeX) inserted after Setup")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config))
@@ -132,13 +137,35 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     raw = RawData(Path(args.raw), cfg)
 
-    runs = [args.tag] + ([args.compare] if args.compare else [])
+    extra = [t for t in args.extra.split(",") if t]
+    runs = [args.tag] + ([args.compare] if args.compare else []) + [t for t in extra if t not in (args.tag, args.compare)]
     res = {}
     for t in runs:
         f, sig, fq, tab = analyze.compute(ROOT / "results" / t, args.horizon)
         analyze.charts(f, sig, ROOT / "results" / t)
         res[t] = (f, sig, fq, tab)
     f, sig, fq, tab = res[args.tag]
+
+    # sensitivity across runs (whole sample)
+    sens = []
+    for t in runs:
+        ff, _, fqq, tb = res[t]
+        a = tb[(tb["regime"] == "all")].set_index("signal")
+        sens.append({"Run": t, "Knots": ff["knots"].iloc[0] if "knots" in ff else "0,3,7",
+                     "Recovery": (f"fit (mean {ff['recovery'].mean():.0%})" if "recovery" in ff and ff["recovery"].std() > 1e-6
+                                  else (f"{ff['recovery'].iloc[0]:.0%}" if "recovery" in ff else "40%")),
+                     "Base": "Bund" if "Bund" in str(ff["curve_src"].iloc[-1]) else "€STR OIS",
+                     "Med. RMSE": ff["rmse_bp"].median(), "RMSE 2024+": ff.loc[ff["date"] >= "2024-01-01", "rmse_bp"].median(),
+                     "Share lambda<0": ff["breakdown"].mean(),
+                     "Corr(cpn) haz": a.loc["Hazard residual", "corr_with_coupon"],
+                     "IC haz": a.loc["Hazard residual", "rank_IC"], "IC Z": a.loc["Z-spread residual", "rank_IC"]})
+    sens = pd.DataFrame(sens)
+    if "recovery" in res[runs[-1]][0] and any("fit" in str(x) for x in sens["Recovery"]):
+        rf = next(res[t][0] for t in runs if res[t][0]["recovery"].std() > 1e-6)
+        fig, ax = plt.subplots(figsize=(8, 2.4))
+        ax.plot(rf["date"], rf["recovery"] * 100, color="tab:purple"); ax.set_ylabel("%")
+        ax.set_title("Recovery estimated jointly with the hazard curve (each date)")
+        fig.tight_layout(); fig.savefig(out / "fig_recovery.png", dpi=150); plt.close(fig)
     shutil.copy(ROOT / "results" / args.tag / "hazard_history.png", out / "fig_history.png")
     shutil.copy(ROOT / "results" / args.tag / "snapshot.png", out / "fig_snapshot.png")
     if args.compare:
@@ -148,8 +175,10 @@ def main():
 
     # headline numbers
     lf = f[f["date"] == f["date"].max()].iloc[0]
-    lam_last = pd.DataFrame({"Bucket": ["0-3Y", "3-7Y", "7Y+"],
-                             "Lambda (bp)": [lf[f"lambda_{j}"] * 1e4 for j in range(3)]})
+    kn = [float(k) for k in str(lf.get("knots", "0,3,7")).split(",")]
+    labs = [f"{a:g}-{b:g}Y" for a, b in zip(kn[:-1], kn[1:])] + [f"{kn[-1]:g}Y+"]
+    lam_last = pd.DataFrame({"Bucket": labs, "Lambda (bp)": [lf[f"lambda_{j}"] * 1e4 for j in range(len(labs))],
+                             "Spread approx. (bp)": [lf[f"lambda_{j}"] * 1e4 * (1 - lf.get("recovery", 0.4)) for j in range(len(labs))]})
     cds = pd.DataFrame({"Tenor": [f"{T}Y" for T in (1, 3, 5, 7, 10)],
                         "Implied (bp)": [lf[f"cds_impl_{T}y"] for T in (1, 3, 5, 7, 10)],
                         "Market (bp)": [lf[f"cds_mkt_{T}y"] for T in (1, 3, 5, 7, 10)]})
@@ -188,7 +217,7 @@ def main():
 \section*{{Setup}}
 Sample {f['date'].min():%Y-%m-%d} to {f['date'].max():%Y-%m-%d}, {len(f):,} fit dates ({freq}),
 {sig['isin'].nunique()} distinct fixed-coupon OATs, {f['n_bonds'].median():.0f} bonds per date (median).
-Recovery $R={int(round(m['recovery']*100))}\%$ of face, hazard buckets 0-3Y / 3-7Y / 7Y+,
+Main run: recovery $R={f['recovery'].iloc[0]*100 if 'recovery' in f else 40:.0f}\%$ of face, hazard buckets starting at {esc(f['knots'].iloc[0] if 'knots' in f else '0,3,7')} years,
 negative $\lambda$ allowed so that the QE breakdown is visible. Risk-free curve: €STR OIS
 (EONIA OIS $-8.5$bp before Oct 2019).
 \[
@@ -196,6 +225,8 @@ P=\sum_i CF_i\,D(t_i)\,Q(t_i)+100R\sum_k D(m_k)\big[Q(m_{{k-1}})-Q(m_k)\big],\qq
 Q(t)=e^{{-\int_0^t\lambda}},\qquad s\approx\lambda(1-R).
 \]
 Residual $=$ market yield $-$ model yield (bp, $>0$ = cheap). Baseline: Z-spread minus a cubic in maturity.
+
+{args.note}
 
 \section{{Data}}
 Figure~\ref{{fig:data}} shows the last cross-section; Table~\ref{{tab:snap}} lists every bond in it
@@ -215,11 +246,15 @@ Figure~\ref{{fig:data}} shows the last cross-section; Table~\ref{{tab:snap}} lis
     if args.compare:
         fq2 = res[args.compare][2]
         tex += rf"""
-\subsection*{{Funding adjustment (run \texttt{{{esc(args.compare)}}}): discount at €STR $+$ (GC $-$ €STR)}}
+\subsection*{{Comparison run \texttt{{{esc(args.compare)}}}}}
 {table(fq_tab(fq2), f"Fit quality by regime, run {esc(args.compare)}", nd=2)}
 \begin{{figure}}[H]\centering\includegraphics[width=0.95\linewidth]{{fig_history_cmp.png}}\caption{{Run \texttt{{{esc(args.compare)}}}.}}\end{{figure}}
 """
     tex += rf"""
+\section{{Sensitivity across specifications}}
+{table(sens, "All runs, whole sample. RMSE in bp of yield. Corr(cpn): cross-sectional correlation of the hazard residual with the coupon. IC: rank IC of residual vs next-week compression.", nd=3, small=True, align="llllrrrrrr", fit=True)}
+{"\\begin{figure}[H]\\centering\\includegraphics[width=0.85\\linewidth]{fig_recovery.png}\\end{figure}" if (out / "fig_recovery.png").exists() else ""}
+
 \section{{Relative-value signals: hazard residual vs Z-spread residual}}
 Corr(coupon): average cross-sectional correlation with the coupon (Z-spread RV should load on it, the
 hazard residual should not). Half-life in fit periods from a pooled AR(1). Rank IC: correlation between the

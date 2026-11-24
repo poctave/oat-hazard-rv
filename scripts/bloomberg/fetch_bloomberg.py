@@ -2,8 +2,8 @@
 
 Run on the machine where the Terminal is open:
 
-    python scripts/fetch_bloomberg.py --check    # 1 min: checks every ticker resolves
-    python scripts/fetch_bloomberg.py            # full pull into data/raw/
+    python scripts/bloomberg/fetch_bloomberg.py --check    # 1 min: checks every ticker resolves
+    python scripts/bloomberg/fetch_bloomberg.py            # full pull into data/raw/
 
 Requires blpapi:
     pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi
@@ -23,7 +23,7 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit("blpapi not installed, see the docstring at the top of this file.")
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
 
 STATIC_FIELDS = [

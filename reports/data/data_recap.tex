@@ -1,0 +1,222 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=1.6cm,landscape]{geometry}
+\usepackage[T1]{fontenc}\usepackage[utf8]{inputenc}\usepackage{lmodern}
+\usepackage{booktabs,longtable,graphicx,float,xcolor,hyperref,textcomp}
+\DeclareUnicodeCharacter{20AC}{\texteuro}\DeclareUnicodeCharacter{2212}{-}
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\title{\textbf{Data recap: Bloomberg pulls for the OAT hazard-rate thesis}}
+\author{Octave, Master 203 (\texttt{oat-hazard-rv})}
+\date{Pulled 24 November 2026 from the Dauphine Bloomberg terminal}
+\begin{document}\maketitle
+
+\section*{Where the data is}
+\begin{itemize}\itemsep0pt
+\item \textbf{Dauphine PC (a215-06):} \texttt{C:\textbackslash{}Users\textbackslash{}suproc26\textbackslash{}Downloads\textbackslash{}work\textbackslash{}oat-hazard-rv\textbackslash{}data\textbackslash{}raw} and its \texttt{extra} subfolder. Parquet files, open with
+\texttt{pandas.read\_parquet}. This is the master copy.
+\item \textbf{Claude workspace:} identical copy, used for the fits and reports.
+\item \textbf{Not on GitHub} (\texttt{data/} is git-ignored): Bloomberg's terms do not allow republishing the data. The code
+in the repo (\texttt{scripts/fetch\_bloomberg.py}, \texttt{scripts/fetch\_extra.py}) re-pulls everything from any terminal.
+\item Pulled through the Bloomberg Desktop API (\texttt{blpapi}) from Python, daily, 1 Jan 2010 to 24 Nov 2026.
+\end{itemize}
+Totals: 18 files, 1,972,226 rows, 21.5 MB;
+697 government bonds with daily prices across 4 countries; 136 market time series.
+
+{\footnotesize\begin{longtable}{llrrllr}
+\caption{File inventory (paths relative to data/raw)}\\ \toprule \textbf{File} & \textbf{Content} & \textbf{Rows} & \textbf{Items} & \textbf{From} & \textbf{To} & \textbf{MB} \\ \midrule \endfirsthead
+\toprule \textbf{File} & \textbf{Content} & \textbf{Rows} & \textbf{Items} & \textbf{From} & \textbf{To} & \textbf{MB} \\ \midrule \endhead
+extra/discovered.parquet & Series found by search: GC Pooling, BTF bills, €STR compounded, Bubill indices & 342,313 & 113 & 2010-01-01 & 2026-11-24 & 2.0 \\
+extra/market\_extra.parquet & ECB rates, Euribor, swaps, generic yields, sovereign CDS, iTraxx, vol, futures & 191,658 & 57 & 2010-01-01 & 2026-11-24 & 1.1 \\
+extra/oat\_quotes.parquet & OAT bid/ask price and yield, Bloomberg Z-spread and ASW & 207,973 & 117 & 2010-01-01 & 2026-11-24 & 4.7 \\
+extra/prices\_BKO.parquet & Schatz: daily PX\_LAST, PX\_BID, PX\_ASK, YLD\_YTM\_MID & 36,272 & 72 & 2010-01-01 & 2026-11-24 & 0.4 \\
+extra/prices\_BTPS.parquet & BTPs: daily PX\_LAST, PX\_BID, PX\_ASK, YLD\_YTM\_MID & 335,939 & 235 & 2010-01-01 & 2026-11-24 & 4.3 \\
+extra/prices\_DBR.parquet & Bunds: daily PX\_LAST, PX\_BID, PX\_ASK, YLD\_YTM\_MID & 184,566 & 96 & 2010-01-01 & 2026-11-24 & 2.8 \\
+extra/prices\_OBL.parquet & Bobls: daily PX\_LAST, PX\_BID, PX\_ASK, YLD\_YTM\_MID & 54,990 & 50 & 2010-01-01 & 2026-11-24 & 0.7 \\
+extra/prices\_SPGB.parquet & Bonos: daily PX\_LAST, PX\_BID, PX\_ASK, YLD\_YTM\_MID & 197,158 & 127 & 2010-01-01 & 2026-11-24 & 2.8 \\
+extra/static\_BKO.parquet & Schatz: static fields (all lines in govtList) & 136 & 136 & static &  & 0.0 \\
+extra/static\_BTPS.parquet & BTPs: static fields (all lines in govtList) & 435 & 435 & static &  & 0.0 \\
+extra/static\_DBR.parquet & Bunds: static fields (all lines in govtList) & 163 & 163 & static &  & 0.0 \\
+extra/static\_OBL.parquet & Bobls: static fields (all lines in govtList) & 104 & 104 & static &  & 0.0 \\
+extra/static\_SPGB.parquet & Bonos: static fields (all lines in govtList) & 202 & 199 & static &  & 0.0 \\
+market.parquet & €STR/EONIA fixings and OIS, France CDS, Bund/OAT generic yields & 209,611 & 59 & 2010-01-01 & 2026-11-24 & 1.0 \\
+oat\_amt\_out\_history.parquet & OAT amount outstanding history (monthly steps, taps/buybacks) & 2,282 & 126 & 1992-01-02 & 2026-11-20 & 0.0 \\
+oat\_prices.parquet & OAT daily clean price (BGN) and mid yield & 207,932 & 117 & 2010-01-01 & 2026-11-24 & 1.5 \\
+oat\_static.parquet & Model universe: fixed-coupon nominal annual OATs maturing after 2011 & 126 & 126 & static &  & 0.0 \\
+oat\_static\_all.parquet & All FRTR lines from govtList (live + matured): static fields & 366 & 366 & static &  & 0.0 \\
+\bottomrule\end{longtable}}
+
+
+\begin{table}[H]\centering\footnotesize\caption{Bond universes. Lines listed = everything Bloomberg's govtList returns for the ticker (live and matured); kept = fixed-coupon, non-linked, maturing after 2011.}
+\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{\begin{tabular}{lrrrllr}\toprule
+\textbf{Market} & \textbf{Lines listed} & \textbf{Fixed nominal kept} & \textbf{With prices} & \textbf{Coupon freq} & \textbf{Maturities} & \textbf{Median bid-ask (pts)} \\ \midrule
+France OAT (FRTR) & 366 & 126 & 117 & annual & 2011-2072 & 0.048 \\
+Germany Bund (DBR) & 163 & 96 & 96 & annual & 1996-2056 & 0.032 \\
+Germany Bobl (OBL) & 104 & 50 & 50 & annual & 1996-2031 & 0.020 \\
+Germany Schatz (BKO) & 136 & 72 & 72 & annual & 1995-2028 & 0.026 \\
+Italy BTP (BTPS) & 435 & 235 & 235 & semi-annual & 1996-2072 & 0.033 \\
+Spain Bono (SPGB) & 202 & 127 & 127 & annual & 1995-2071 & 0.052 \\
+\bottomrule\end{tabular}}\end{table}
+
+
+\begin{figure}[H]\centering\includegraphics[width=0.95\linewidth]{fig_oat.png}\end{figure}
+\begin{figure}[H]\centering\includegraphics[width=0.95\linewidth]{fig_market.png}\caption{Key series, weekly.}\end{figure}
+\begin{figure}[H]\centering\includegraphics[width=0.95\linewidth]{fig_coverage.png}\end{figure}
+
+\begin{table}[H]\centering\small\caption{Not available or partial, and the workaround used}
+\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{\begin{tabular}{lll}\toprule
+\textbf{Item} & \textbf{Status} & \textbf{Workaround} \\ \midrule
+French GC repo (RepoFunds Rate France GC, REFRGCFR Index) & Valid ticker, history not entitled & Use BTF 3M - €STR or GC Pooling \\
+Broker French GC repo (RB000xxx Mmkt) & Not entitled & Same \\
+Repo rate / specialness per OAT & No field on this terminal & Residual factor proxies (age, amount outstanding) \\
+ECB/PSPP holdings per ISIN & Not published per bond & Amount outstanding, QE dummies \\
+GDBR 3M/6M/1Y, GFRN 1Y, GFRN50 generics & Invalid tickers & GETB1 (Bubill), GBTF bills, OAT 2072 itself \\
+iTraxx Senior Financials generic & Invalid ticker & iTraxx Main / Crossover \\
+France CDS EUR 3Y/7Y & Only since Sep 2026 & USD curve \\
+France CDS USD 20Y/30Y & Only since Sep 2025 & USD 10Y \\
+\bottomrule\end{tabular}}\end{table}
+
+
+\section*{Market series (136)}
+Rates in \%, CDS and iTraxx in bp, futures in price, vol indices in vol points. \texttt{discovered} series were found by keyword
+search on the terminal and kept if they had history.
+{\footnotesize\begin{longtable}{lllllrr}
+\caption{All market time series}\\ \toprule \textbf{Group} & \textbf{Name} & \textbf{Bloomberg ticker} & \textbf{From} & \textbf{To} & \textbf{Obs} & \textbf{Last} \\ \midrule \endfirsthead
+\toprule \textbf{Group} & \textbf{Name} & \textbf{Bloomberg ticker} & \textbf{From} & \textbf{To} & \textbf{Obs} & \textbf{Last} \\ \midrule \endhead
+€STR / EONIA & XESTR1M Index & XESTR1M Index & 2010-01-01 & 2026-10-23 & 4,386 & 2.444 \\
+€STR / EONIA & XESTR1W Index & XESTR1W Index & 2010-01-01 & 2026-11-17 & 4,403 & 2.443 \\
+€STR / EONIA & XESTR1Y Index & XESTR1Y Index & 2010-01-01 & 2025-11-24 & 4,147 & 2.113 \\
+€STR / EONIA & XESTR2M Index & XESTR2M Index & 2010-01-01 & 2026-09-24 & 4,365 & 2.445 \\
+€STR / EONIA & XESTR3M Index & XESTR3M Index & 2010-01-01 & 2026-08-24 & 4,342 & 2.385 \\
+€STR / EONIA & XESTR6M Index & XESTR6M Index & 2010-01-01 & 2026-05-22 & 4,276 & 2.256 \\
+€STR / EONIA & XESTRON Index & XESTRON Index & 2010-01-01 & 2026-11-24 & 4,408 & 2.444 \\
+€STR / EONIA & eonia\_fixing & EONIA Index & 2010-01-04 & 2021-12-31 & 3,074 & -0.505 \\
+€STR / EONIA & eonia\_ois\_1 & EUSWE1 Curncy & 2010-01-04 & 2021-12-31 & 3,097 & -0.456 \\
+€STR / EONIA & eonia\_ois\_10 & EUSWE10 Curncy & 2010-01-04 & 2021-12-30 & 3,094 & 0.175 \\
+€STR / EONIA & eonia\_ois\_12 & EUSWE12 Curncy & 2010-01-04 & 2021-12-30 & 3,068 & 0.281 \\
+€STR / EONIA & eonia\_ois\_15 & EUSWE15 Curncy & 2010-01-04 & 2021-12-30 & 3,069 & 0.399 \\
+€STR / EONIA & eonia\_ois\_2 & EUSWE2 Curncy & 2010-01-04 & 2021-12-31 & 3,113 & -0.325 \\
+€STR / EONIA & eonia\_ois\_20 & EUSWE20 Curncy & 2010-01-04 & 2021-12-30 & 3,068 & 0.480 \\
+€STR / EONIA & eonia\_ois\_25 & EUSWE25 Curncy & 2010-01-04 & 2021-12-30 & 3,070 & 0.479 \\
+€STR / EONIA & eonia\_ois\_3 & EUSWE3 Curncy & 2010-01-04 & 2021-12-31 & 3,083 & -0.213 \\
+€STR / EONIA & eonia\_ois\_30 & EUSWE30 Curncy & 2010-01-04 & 2021-12-30 & 3,068 & 0.451 \\
+€STR / EONIA & eonia\_ois\_4 & EUSWE4 Curncy & 2010-01-04 & 2021-12-30 & 3,084 & -0.137 \\
+€STR / EONIA & eonia\_ois\_40 & EUSWE40 Curncy & 2010-01-04 & 2021-12-31 & 3,074 & 0.400 \\
+€STR / EONIA & eonia\_ois\_5 & EUSWE5 Curncy & 2010-01-04 & 2021-12-30 & 3,076 & -0.087 \\
+€STR / EONIA & eonia\_ois\_50 & EUSWE50 Curncy & 2010-01-04 & 2021-12-30 & 3,069 & 0.353 \\
+€STR / EONIA & eonia\_ois\_6 & EUSWE6 Curncy & 2010-01-04 & 2021-12-30 & 3,090 & -0.042 \\
+€STR / EONIA & eonia\_ois\_7 & EUSWE7 Curncy & 2010-01-04 & 2021-12-30 & 3,093 & 0.003 \\
+€STR / EONIA & eonia\_ois\_8 & EUSWE8 Curncy & 2010-01-04 & 2021-12-30 & 3,095 & 0.056 \\
+€STR / EONIA & eonia\_ois\_9 & EUSWE9 Curncy & 2010-01-04 & 2021-12-30 & 3,094 & 0.116 \\
+€STR / EONIA & eonia\_ois\_A & EUSWEA Curncy & 2010-01-04 & 2021-12-31 & 3,106 & -0.491 \\
+€STR / EONIA & eonia\_ois\_C & EUSWEC Curncy & 2010-01-04 & 2021-12-31 & 3,096 & -0.488 \\
+€STR / EONIA & eonia\_ois\_F & EUSWEF Curncy & 2010-01-04 & 2021-12-31 & 3,109 & -0.484 \\
+€STR / EONIA & eonia\_ois\_I & EUSWEI Curncy & 2010-01-04 & 2021-12-31 & 3,106 & -0.475 \\
+€STR / EONIA & estr\_fixing & ESTRON Index & 2019-10-01 & 2026-11-23 & 1,831 & 2.443 \\
+€STR / EONIA & estr\_ois\_1 & EESWE1 Curncy & 2010-01-04 & 2026-11-24 & 4,334 & 2.914 \\
+€STR / EONIA & estr\_ois\_10 & EESWE10 Curncy & 2010-01-04 & 2026-11-24 & 4,319 & 3.107 \\
+€STR / EONIA & estr\_ois\_12 & EESWE12 Curncy & 2010-01-04 & 2026-11-24 & 4,316 & 3.160 \\
+€STR / EONIA & estr\_ois\_15 & EESWE15 Curncy & 2010-01-04 & 2026-11-24 & 4,317 & 3.221 \\
+€STR / EONIA & estr\_ois\_2 & EESWE2 Curncy & 2010-01-04 & 2026-11-24 & 4,333 & 2.977 \\
+€STR / EONIA & estr\_ois\_20 & EESWE20 Curncy & 2010-01-04 & 2026-11-24 & 4,314 & 3.247 \\
+€STR / EONIA & estr\_ois\_25 & EESWE25 Curncy & 2010-01-04 & 2026-11-24 & 4,314 & 3.210 \\
+€STR / EONIA & estr\_ois\_3 & EESWE3 Curncy & 2010-01-04 & 2026-11-24 & 4,326 & 2.989 \\
+€STR / EONIA & estr\_ois\_30 & EESWE30 Curncy & 2010-01-04 & 2026-11-24 & 4,313 & 3.154 \\
+€STR / EONIA & estr\_ois\_4 & EESWE4 Curncy & 2010-01-04 & 2026-11-24 & 4,317 & 2.996 \\
+€STR / EONIA & estr\_ois\_40 & EESWE40 Curncy & 2010-01-04 & 2026-11-24 & 4,312 & 3.008 \\
+€STR / EONIA & estr\_ois\_5 & EESWE5 Curncy & 2010-01-04 & 2026-11-24 & 4,312 & 3.005 \\
+€STR / EONIA & estr\_ois\_50 & EESWE50 Curncy & 2010-01-04 & 2026-11-24 & 4,315 & 2.847 \\
+€STR / EONIA & estr\_ois\_6 & EESWE6 Curncy & 2010-01-04 & 2026-11-24 & 4,316 & 3.015 \\
+€STR / EONIA & estr\_ois\_7 & EESWE7 Curncy & 2010-01-04 & 2026-11-24 & 4,312 & 3.033 \\
+€STR / EONIA & estr\_ois\_8 & EESWE8 Curncy & 2010-01-04 & 2026-11-24 & 4,316 & 3.056 \\
+€STR / EONIA & estr\_ois\_9 & EESWE9 Curncy & 2010-01-04 & 2026-11-24 & 4,315 & 3.081 \\
+€STR / EONIA & estr\_ois\_A & EESWEA Curncy & 2010-01-04 & 2026-11-24 & 4,332 & 2.485 \\
+€STR / EONIA & estr\_ois\_C & EESWEC Curncy & 2010-01-04 & 2026-11-24 & 4,336 & 2.631 \\
+€STR / EONIA & estr\_ois\_F & EESWEF Curncy & 2010-01-04 & 2026-11-24 & 4,337 & 2.752 \\
+€STR / EONIA & estr\_ois\_I & EESWEI Curncy & 2010-01-04 & 2026-11-24 & 4,332 & 2.847 \\
+Policy, Euribor, swaps & ecb\_dfr & EUORDEPO Index & 2010-01-04 & 2026-11-24 & 4,396 & 2.500 \\
+Policy, Euribor, swaps & ecb\_mro & EURR002W Index & 2010-01-04 & 2026-11-24 & 4,393 & 2.650 \\
+Policy, Euribor, swaps & euribor\_3m & EUR003M Index & 2010-01-04 & 2026-11-23 & 4,326 & 2.809 \\
+Policy, Euribor, swaps & euribor\_6m & EUR006M Index & 2010-01-04 & 2026-11-23 & 4,326 & 3.079 \\
+Policy, Euribor, swaps & eusa\_10 & EUSA10 Curncy & 2010-01-01 & 2026-11-24 & 4,353 & 3.351 \\
+Policy, Euribor, swaps & eusa\_15 & EUSA15 Curncy & 2010-01-01 & 2026-11-24 & 4,360 & 3.404 \\
+Policy, Euribor, swaps & eusa\_2 & EUSA2 Curncy & 2010-01-01 & 2026-11-24 & 4,368 & 3.342 \\
+Policy, Euribor, swaps & eusa\_20 & EUSA20 Curncy & 2010-01-01 & 2026-11-24 & 4,360 & 3.389 \\
+Policy, Euribor, swaps & eusa\_30 & EUSA30 Curncy & 2010-01-01 & 2026-11-24 & 4,372 & 3.248 \\
+Policy, Euribor, swaps & eusa\_5 & EUSA5 Curncy & 2010-01-01 & 2026-11-24 & 4,357 & 3.318 \\
+Policy, Euribor, swaps & eusa\_7 & EUSA7 Curncy & 2010-01-01 & 2026-11-24 & 4,355 & 3.318 \\
+Funding, bills & GBTF1MO Index & GBTF1MO Index & 2010-01-04 & 2026-11-24 & 4,315 & 2.612 \\
+Funding, bills & GBTF1YR Index & GBTF1YR Index & 2010-01-04 & 2026-11-24 & 4,329 & 3.315 \\
+Funding, bills & GBTF3MO Index & GBTF3MO Index & 2010-01-04 & 2026-11-24 & 4,326 & 2.845 \\
+Funding, bills & GBTF6MO Index & GBTF6MO Index & 2010-01-04 & 2026-11-24 & 4,329 & 3.073 \\
+Funding, bills & GETB1 Index & GETB1 Index & 2010-01-01 & 2026-11-24 & 4,397 & 2.703 \\
+Funding, bills & SGCP12M Index & SGCP12M Index & 2013-10-16 & 2026-11-24 & 3,353 & 3.138 \\
+Funding, bills & SGCP1M Index & SGCP1M Index & 2013-10-16 & 2026-11-24 & 3,353 & 2.565 \\
+Funding, bills & SGCP1W Index & SGCP1W Index & 2013-10-16 & 2026-11-24 & 3,352 & 2.519 \\
+Funding, bills & SGCP3M Index & SGCP3M Index & 2013-10-16 & 2026-11-24 & 3,352 & 2.868 \\
+Funding, bills & SGCP6M Index & SGCP6M Index & 2013-10-16 & 2026-11-24 & 3,351 & 3.035 \\
+Funding, bills & SGCPFR Index & SGCPFR Index & 2010-01-04 & 2026-11-24 & 4,326 & 2.533 \\
+Funding, bills & SGCPON Index & SGCPON Index & 2010-01-04 & 2026-11-24 & 4,324 & 2.521 \\
+Funding, bills & SGCPTN Index & SGCPTN Index & 2010-01-04 & 2026-11-24 & 4,326 & 2.542 \\
+Funding, bills & fr\_3m & GFRN3M Index & 2010-01-01 & 2011-03-09 & 282 & 0.872 \\
+Funding, bills & fr\_6m & GFRN6M Index & 2010-01-01 & 2011-02-14 & 281 & 0.837 \\
+Generic govt yields & GBTPGR10 & GBTPGR10 Index & 2010-01-01 & 2026-11-24 & 4,396 & 4.355 \\
+Generic govt yields & GBTPGR2 & GBTPGR2 Index & 2010-01-01 & 2026-11-24 & 4,394 & 3.453 \\
+Generic govt yields & GBTPGR30 & GBTPGR30 Index & 2010-01-01 & 2026-11-24 & 4,398 & 4.959 \\
+Generic govt yields & GBTPGR5 & GBTPGR5 Index & 2010-01-01 & 2026-11-24 & 4,397 & 3.885 \\
+Generic govt yields & GDBR10 & GDBR10 Index & 2010-01-01 & 2026-11-24 & 4,399 & 3.268 \\
+Generic govt yields & GDBR15 & GDBR15 Index & 2010-01-01 & 2026-11-24 & 4,399 & 3.525 \\
+Generic govt yields & GDBR2 & GDBR2 Index & 2010-01-01 & 2026-11-24 & 4,398 & 3.064 \\
+Generic govt yields & GDBR20 & GDBR20 Index & 2010-01-01 & 2026-11-24 & 4,399 & 3.626 \\
+Generic govt yields & GDBR30 & GDBR30 Index & 2010-01-01 & 2026-11-24 & 4,399 & 3.646 \\
+Generic govt yields & GDBR5 & GDBR5 Index & 2010-01-01 & 2026-11-24 & 4,397 & 3.105 \\
+Generic govt yields & GDBR7 & GDBR7 Index & 2010-01-01 & 2026-11-24 & 4,399 & 3.156 \\
+Generic govt yields & GFRN10 & GFRN10 Index & 2010-01-01 & 2026-11-24 & 4,398 & 4.783 \\
+Generic govt yields & GFRN15 & GFRN15 Index & 2010-01-01 & 2026-11-24 & 4,392 & 5.134 \\
+Generic govt yields & GFRN2 & GFRN2 Index & 2010-01-01 & 2026-11-24 & 4,398 & 3.545 \\
+Generic govt yields & GFRN20 & GFRN20 Index & 2010-01-01 & 2026-11-24 & 4,395 & 5.234 \\
+Generic govt yields & GFRN30 & GFRN30 Index & 2010-01-01 & 2026-11-24 & 4,393 & 5.349 \\
+Generic govt yields & GFRN5 & GFRN5 Index & 2010-01-01 & 2026-11-24 & 4,398 & 4.216 \\
+Generic govt yields & GFRN7 & GFRN7 Index & 2010-01-01 & 2026-11-24 & 4,398 & 4.457 \\
+Generic govt yields & GSPG10YR & GSPG10YR Index & 2010-01-01 & 2026-11-24 & 4,396 & 3.868 \\
+Generic govt yields & GSPG2YR & GSPG2YR Index & 2010-01-01 & 2026-11-24 & 4,395 & 3.159 \\
+Generic govt yields & GSPG30YR & GSPG30YR Index & 2010-01-01 & 2026-11-24 & 4,396 & 4.400 \\
+Generic govt yields & GSPG5YR & GSPG5YR Index & 2010-01-01 & 2026-11-24 & 4,397 & 3.408 \\
+Sovereign CDS & cds\_10y & FRANCE CDS USD SR 10Y D14 Corp & 2010-01-01 & 2026-11-24 & 2,610 & 129.638 \\
+Sovereign CDS & cds\_1y & FRANCE CDS USD SR 1Y D14 Corp & 2014-12-09 & 2026-11-24 & 1,629 & 41.728 \\
+Sovereign CDS & cds\_3y & FRANCE CDS USD SR 3Y D14 Corp & 2014-11-17 & 2026-11-24 & 1,705 & 68.086 \\
+Sovereign CDS & cds\_5y & FRANCE CDS USD SR 5Y D14 Corp & 2010-01-01 & 2026-11-24 & 3,966 & 90.629 \\
+Sovereign CDS & cds\_7y & FRANCE CDS USD SR 7Y D14 Corp & 2018-03-05 & 2026-11-24 & 1,691 & 109.774 \\
+Sovereign CDS & cds\_belgium\_10y & BELGIUM CDS USD SR 10Y D14 Corp & 2010-01-01 & 2026-11-24 & 1,434 & 78.369 \\
+Sovereign CDS & cds\_belgium\_5y & BELGIUM CDS USD SR 5Y D14 Corp & 2010-01-01 & 2026-11-24 & 2,295 & 46.465 \\
+Sovereign CDS & cds\_france\_20y\_extra & FRANCE CDS USD SR 20Y D14 Corp & 2025-09-22 & 2026-11-24 & 307 & 147.876 \\
+Sovereign CDS & cds\_france\_2y\_extra & FRANCE CDS USD SR 2Y D14 Corp & 2014-12-09 & 2026-11-24 & 1,698 & 55.927 \\
+Sovereign CDS & cds\_france\_30y\_extra & FRANCE CDS USD SR 30Y D14 Corp & 2025-09-22 & 2026-11-24 & 307 & 152.045 \\
+Sovereign CDS & cds\_france\_4y\_extra & FRANCE CDS USD SR 4Y D14 Corp & 2018-03-05 & 2026-11-24 & 1,329 & 79.529 \\
+Sovereign CDS & cds\_german\_10y & GERMAN CDS USD SR 10Y D14 Corp & 2010-01-01 & 2026-11-24 & 2,611 & 23.776 \\
+Sovereign CDS & cds\_german\_5y & GERMAN CDS USD SR 5Y D14 Corp & 2010-01-01 & 2026-11-24 & 3,965 & 13.036 \\
+Sovereign CDS & cds\_italy\_10y & ITALY CDS USD SR 10Y D14 Corp & 2010-01-01 & 2026-11-24 & 1,601 & 98.367 \\
+Sovereign CDS & cds\_italy\_5y & ITALY CDS USD SR 5Y D14 Corp & 2010-01-01 & 2026-11-24 & 3,379 & 62.905 \\
+Sovereign CDS & cds\_nether\_10y & NETHER CDS USD SR 10Y D14 Corp & 2010-01-01 & 2026-11-24 & 1,442 & 24.449 \\
+Sovereign CDS & cds\_nether\_5y & NETHER CDS USD SR 5Y D14 Corp & 2010-01-01 & 2026-11-24 & 2,339 & 13.258 \\
+Sovereign CDS & cds\_spain\_10y & SPAIN CDS USD SR 10Y D14 Corp & 2010-01-01 & 2026-11-24 & 1,498 & 51.126 \\
+Sovereign CDS & cds\_spain\_5y & SPAIN CDS USD SR 5Y D14 Corp & 2010-01-01 & 2026-11-24 & 2,870 & 29.005 \\
+Sovereign CDS & cdseur\_10y & FRANCE CDS EUR SR 10Y D14 Corp & 2010-01-01 & 2026-11-24 & 169 & 93.258 \\
+Sovereign CDS & cdseur\_5y & FRANCE CDS EUR SR 5Y D14 Corp & 2012-12-19 & 2026-11-23 & 2,196 & 69.339 \\
+Sovereign CDS & cdseur\_france\_1y & FRANCE CDS EUR SR 1Y D14 Corp & 2018-08-30 & 2026-11-23 & 2,148 & 23.333 \\
+Sovereign CDS & cdseur\_france\_2y & FRANCE CDS EUR SR 2Y D14 Corp & 2018-08-30 & 2026-11-23 & 2,148 & 32.584 \\
+Sovereign CDS & cdseur\_france\_3y & FRANCE CDS EUR SR 3Y D14 Corp & 2026-09-18 & 2026-11-24 & 16 & 47.439 \\
+Sovereign CDS & cdseur\_france\_7y & FRANCE CDS EUR SR 7Y D14 Corp & 2026-09-18 & 2026-11-24 & 20 & 77.971 \\
+Credit indices & itraxx\_main\_5y & ITRX EUR CDSI GEN 5Y Corp & 2011-10-12 & 2026-11-24 & 3,811 & 64.880 \\
+Credit indices & itraxx\_xover\_5y & ITRX XOVER CDSI GEN 5Y Corp & 2011-09-09 & 2026-11-24 & 3,818 & 319.690 \\
+Vol, equity & cac & CAC Index & 2010-01-04 & 2026-11-24 & 4,327 & 8,040.490 \\
+Vol, equity & move & MOVE Index & 2010-01-01 & 2026-11-23 & 4,314 & 100.910 \\
+Vol, equity & sx5e & SX5E Index & 2010-01-04 & 2026-11-24 & 4,339 & 6,003.760 \\
+Vol, equity & v2x & V2X Index & 2010-01-04 & 2026-11-24 & 4,304 & 25.227 \\
+Vol, equity & vix & VIX Index & 2010-01-04 & 2026-11-24 & 4,283 & 27.030 \\
+Futures & bobl\_fut & OE1 Comdty & 2010-01-04 & 2026-11-24 & 4,312 & 113.480 \\
+Futures & btp\_fut & IK1 Comdty & 2010-01-04 & 2026-11-24 & 4,311 & 113.000 \\
+Futures & bund\_fut & RX1 Comdty & 2010-01-04 & 2026-11-24 & 4,312 & 122.960 \\
+Futures & buxl\_fut & UB1 Comdty & 2010-01-04 & 2026-11-24 & 4,313 & 106.520 \\
+Futures & oat\_fut & OAT1 Comdty & 2012-04-16 & 2026-11-24 & 3,727 & 110.030 \\
+\bottomrule\end{longtable}}
+
+\end{document}

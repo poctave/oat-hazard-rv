@@ -1,7 +1,7 @@
 """Second Bloomberg pull: everything else the thesis needs.
 
-    python scripts/fetch_extra.py            # all blocks
-    python scripts/fetch_extra.py --only market,discover
+    python scripts/bloomberg/fetch_extra.py            # all blocks
+    python scripts/bloomberg/fetch_extra.py --only market,discover
 
 Blocks (each writes data/raw/extra/<block>*.parquet and logs to extra.log):
   oat_quotes   bid/ask + Bloomberg Z-spread / ASW for the OAT universe already pulled
@@ -20,8 +20,8 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fetch_bloomberg import BBG, STATIC_FIELDS, bond_security  # noqa: E402
 
 RAW = ROOT / "data" / "raw"

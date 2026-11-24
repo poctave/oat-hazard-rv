@@ -1,7 +1,6 @@
 # Bloomberg pull + model configuration.
-# Tickers marked VERIFY are my best guess: check them in the Terminal
-# (type the ticker <GO>, or use SECF / ALLQ) before the first full pull.
-# fetch_bloomberg.py --check prints which ones resolve.
+# All tickers below were checked on a Bloomberg Terminal on 2026-11-24
+# (scripts/bloomberg/fetch_bloomberg.py --check prints which ones resolve on yours).
 
 start_date: "2010-01-01"
 end_date: null            # null = today
@@ -40,11 +39,12 @@ cds:
   field: "PX_LAST"               # quoted spread in bp
 
 repo:
-  # French GC repo. Candidates: RepoFunds Rate France (BrokerTec) and the
-  # 1W general collateral fixing. VERIFY: search "France GC repo" in SECF.
+  # French GC repo: valid tickers, but history needs an entitlement the Dauphine terminal lacks.
+  # Fallbacks used by the model (pulled by fetch_extra.py): STOXX GC Pooling EUR ON (SGCPON Index)
+  # and the French 3M BTF yield (GBTF3MO Index) as a collateral-scarcity proxy (--funding-src btf3m).
   gc_tickers:
-    rfr_france_gc: "REFRGCFR Index"   # RepoFunds Rate France - GC (verified)
-    rfr_france: "REFRFR Index"        # RepoFunds Rate France, all (fallback)
+    rfr_france_gc: "REFRGCFR Index"   # RepoFunds Rate France - GC
+    rfr_france: "REFRFR Index"        # RepoFunds Rate France, all
   field: "PX_LAST"
 
 bunds:
@@ -52,8 +52,9 @@ bunds:
   oat_generic_yields: ["GFRN2 Index", "GFRN5 Index", "GFRN10 Index", "GFRN30 Index"]
 
 model:
-  recovery: 0.40
-  hazard_knots: [0.0, 3.0, 7.0]  # lambda buckets 0-3Y, 3-7Y, 7Y+
+  # main specification (run_all.py also runs the alternatives)
+  recovery: 0.25                 # 40% cannot price the deep-discount ultra-long OATs
+  hazard_knots: [0.0, 3.0, 7.0, 15.0, 30.0]  # lambda buckets 0-3, 3-7, 7-15, 15-30, 30Y+
   allow_negative_lambda: true    # show the QE breakdown instead of hiding it at 0
-  funding_adjustment: false      # true: discount at €STR + (GC - €STR)
+  funding_adjustment: false      # true: discount at €STR + (funding rate - €STR), see --funding-src
   frequency: "W-FRI"             # fit frequency for the history run: "B" daily, "W-FRI" weekly

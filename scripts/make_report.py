@@ -130,10 +130,11 @@ def main():
     ap.add_argument("--horizon", type=int, default=1)
     ap.add_argument("--extra", default="", help="comma-separated extra runs for the sensitivity table")
     ap.add_argument("--note", default="", help="free text (LaTeX) inserted after Setup")
+    ap.add_argument("--outdir", default=None, help="output folder (default reports/<tag>)")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config))
-    out = ROOT / "reports" / args.tag
+    out = Path(args.outdir) if args.outdir else ROOT / "reports" / args.tag
     out.mkdir(parents=True, exist_ok=True)
     raw = RawData(Path(args.raw), cfg)
 

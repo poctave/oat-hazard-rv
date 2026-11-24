@@ -3,8 +3,8 @@ Writes probe.log next to the repo root."""
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fetch_bloomberg import BBG  # noqa: E402
 
 out = open(ROOT / "probe.log", "w", encoding="utf-8")

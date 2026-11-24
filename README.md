@@ -1,118 +1,116 @@
 # oat-hazard-rv
 
-Relative value on French government bonds (OATs) with a hazard-rate model instead of Z-spread.
+Relative value on French government bonds (OATs) with a reduced-form hazard-rate model instead of Z-spread.
+Master 203 thesis project, Université Paris Dauphine-PSL.
 
-**Question:** does coupon-adjusted RV (residuals from one implied default curve fitted across all OATs) give cleaner rich/cheap signals than Z-spread RV?
+**Research question.** Does coupon-adjusted RV (residuals from one default curve fitted across all OATs) give
+cleaner rich/cheap signals than Z-spread RV, and when does the method break?
 
-Z-spread discounts every promised cash flow at €STR + z, which assumes 100% survival and no recovery. Under credit stress a low-coupon bond (price 70) loses far less in default than a par bond, since the claim is on face value. Z-spread then makes low coupons look rich and high coupons cheap, even with identical credit. A reduced-form model prices that effect explicitly:
+- **Result sheet:** [`reports/results/results.pdf`](reports/results/results.pdf)
+- **Data recap:** [`reports/data/data_recap.pdf`](reports/data/data_recap.pdf)
+- **Method:** [`docs/method.md`](docs/method.md)
+
+## Idea
+
+Z-spread discounts every promised cash flow at €STR + z: it assumes 100% survival and no recovery. In default the
+claim is on face value, so a low-coupon bond (price 70) loses far less than a par bond. Under credit stress, Z-spread
+therefore makes low coupons look rich and high coupons cheap even with identical credit. A reduced-form model prices
+that effect:
 
 ```
 P = Σ CF_i · D(t_i) · Q(t_i)  +  100 · R · Σ D(m_k) · [Q(m_{k-1}) − Q(m_k)]
 Q(t) = exp(−∫ λ),   D = €STR OIS discount factor,   spread ≈ λ (1 − R)
 ```
 
-One piecewise-constant λ curve (0-3Y, 3-7Y, 7Y+) is fitted across all OATs on each date by minimising duration-scaled price errors (≈ yield errors). Residuals (market yield − model yield, > 0 = cheap) are the trade signals. The fitted curve gives an implied CDS curve to compare with traded France CDS.
+On each date one piecewise-constant λ curve is fitted across all OATs by minimising duration-scaled price errors
+(≈ yield errors). Residuals (market yield − model yield, > 0 = cheap) are the trade signals; the curve gives a
+bond-implied CDS curve. λ is allowed to go negative so that the QE breakdown (bonds richer than risk-free
+discounting allows, i.e. survival above 100%) is visible rather than hidden by a bound.
 
-The project follows a practitioner's global-fit approach, including the point that under QE repo traded far below €STR, so the fit wants λ < 0 (survival above 100%). The code lets λ go negative on purpose so the breakdown is visible, and `--funding` discounts at €STR + (GC − €STR) to test whether a funding adjustment repairs it.
+## Results so far (real Bloomberg data, 117 OATs, weekly, 2010 to Nov 2026)
+
+| | Finding |
+|---|---|
+| QE breakdown | The 0-3Y λ is negative on 77% of QE dates (Mar 2015 to Jun 2022): short OATs traded richer than €STR. |
+| Funding | Discounting at €STR + (3M BTF − €STR), a collateral-scarcity proxy, cuts that to 40% and lifts the QE 0-3Y λ from −12bp to +3bp. GC Pooling (ECB basket) sits within a few bp of €STR and changes nothing. |
+| Recovery | R = 40% cannot price the deep-discount ultra-longs (0.5% 2072 at 23, 0.75% 2053 at 37): RMSE 10.5bp post-QE. Main spec R = 25%, five buckets: median RMSE 3.0bp. Fitting R per date gives ~25% since 2024 but is weakly identified (5-42%). |
+| Signals | Hazard residual vs Z-spread residual: lower coupon loading (−0.07 vs −0.13; QE −0.11 vs −0.25), slightly higher rank IC (0.112 vs 0.095), smaller residuals (2.7 vs 3.2bp); the naive long/short is not better yet (0.37 vs 0.43bp/week, no carry, roll or costs). |
+| CDS basis | Bond-implied 5Y CDS is far below traded USD CDS before 2015 (40 vs 92bp), negative under QE, above it since 2025. |
 
 ## Layout
 
 ```
-oathazard/        library
-  curves.py       €STR / EONIA OIS bootstrap, log-linear discount curve
-  bonds.py        OAT schedule, accrued (ACT/ACT ICMA), yield, duration
-  hazard.py       hazard pricing, Z-spread, global fit, implied CDS
-  data.py         turns the raw Bloomberg pull into model inputs
+oathazard/              library
+  curves.py             €STR / EONIA OIS bootstrap, log-linear discount curve, term shifts
+  bonds.py              OAT schedule, accrued (ACT/ACT ICMA), yield, duration
+  hazard.py             hazard pricing, Z-spread, global fit (fixed or fitted recovery), implied CDS
+  data.py               raw Bloomberg pull -> model inputs (curves, funding proxies, cross-sections)
 scripts/
-  fetch_bloomberg.py   pull data via blpapi (Terminal must be open)
-  run_history.py       fit every date -> results/<tag>/fits.parquet, signals.parquet
-  analyze.py           coupon bias, mean reversion, rank IC, long/short by regime
-  make_synthetic.py    fake pull with a known truth, to test without Bloomberg
-tests/                 unit tests (toy example from the notes, bootstrap, yields)
-config.yaml            tickers and model settings
+  bloomberg/            run on a machine with a Bloomberg Terminal (blpapi)
+    fetch_bloomberg.py  OAT universe, static, prices, €STR/EONIA OIS, France CDS, Bund/OAT generics
+    fetch_extra.py      bid/ask, Bunds/BTPs/Bonos, ECB, swaps, CDS, iTraxx, vol, futures, GC/BTF discovery
+    probe_bloomberg.py  ticker checks and searches
+    fetch_repo.py       French GC repo candidates (not entitled on the Dauphine terminal)
+  run_history.py        fit every date -> results/<tag>/fits.parquet, signals.parquet
+  analyze.py            coupon bias, mean reversion, rank IC, long/short, by regime
+  make_report.py        LaTeX result sheet
+  make_data_sheet.py    LaTeX data recap
+  make_synthetic.py     fake pull with a known truth (pipeline test without Bloomberg)
+  run_all.py            reproduces everything in reports/
+reports/
+  results/              result sheet (pdf, tex, figures)
+  data/                 data recap (pdf, tex, figures)
+docs/method.md          model, calibration, conventions, specifications
+tests/                  unit tests
+config.yaml             tickers (all checked on a Terminal) and model settings
 ```
 
-## Run it
+## Reproduce
 
 ```bash
 pip install -r requirements.txt
 pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi
 
-# 0. matured OATs: Terminal SRCH <GO>, ticker FRTR, include matured, fixed coupon,
-#    export ISINs to data/oat_isins_extra.csv (govtList only returns live bonds)
-python scripts/fetch_bloomberg.py --check     # every ticker OK?  fix config.yaml if not
-python scripts/fetch_bloomberg.py             # full pull, 2010 -> today, into data/raw/
+# on the Bloomberg machine (Terminal open and logged in)
+python scripts/bloomberg/fetch_bloomberg.py --check   # every ticker OK?
+python scripts/bloomberg/fetch_bloomberg.py           # ~5 min  -> data/raw/
+python scripts/bloomberg/fetch_extra.py               # ~10 min -> data/raw/extra/
 
-python scripts/run_history.py                 # -> results/R40/
-python scripts/run_history.py --funding       # -> results/R40_funding/
-python scripts/run_history.py --recovery 0.25 # recovery sensitivity
-python scripts/analyze.py --tag R40
+# anywhere
+python scripts/run_all.py                             # 8 specifications + both PDFs, ~7 min
 ```
 
-Test without Bloomberg:
+Without a Terminal: `python -m pytest -q` and `python scripts/run_all.py --synthetic`.
 
-```bash
-python -m pytest -q
-python scripts/make_synthetic.py
-python scripts/run_history.py --raw data/synthetic --tag synth
-python scripts/analyze.py --tag synth
-```
+## Data
 
-On synthetic data (true recovery 40%, GC far below €STR under QE), the plain fit goes negative through QE as expected, and the funding-adjusted fit recovers the true λ.
+Daily, 1 Jan 2010 to 24 Nov 2026, pulled through the Bloomberg Desktop API. Full inventory with coverage charts in
+[`reports/data/data_recap.pdf`](reports/data/data_recap.pdf).
 
-## Data pulled
+| Block | Content |
+|---|---|
+| OATs | 366 FRTR lines (live + matured); 117 fixed nominal priced: clean price, yield, bid/ask, Bloomberg Z-spread and ASW, amount outstanding history |
+| Other govies | Bunds/Bobls/Schatz (218), BTPs (235, semi-annual), Bonos (127): price, bid/ask, yield |
+| Rates | €STR and EONIA fixings, €STR OIS 1M-50Y, EONIA OIS (to 2021), ECB DFR/MRO, Euribor, EUR 6M swaps 2-30Y |
+| Funding | STOXX GC Pooling ON to 12M, French BTF bills 1M-1Y, Bubill indices, €STR compounded |
+| Credit | France CDS USD 1-30Y and EUR; Germany, Italy, Spain, Belgium, Netherlands CDS; iTraxx Main / Crossover |
+| Other | Generic govt yields FR/DE/IT/ES, futures (OAT, Bund, Bobl, Buxl, BTP), V2X, VIX, MOVE, SX5E, CAC |
 
-| Item | Source | Use |
-|---|---|---|
-| OAT universe + static (coupon, maturity, issue date, amount outstanding) | govtList FRTR + SRCH export | cash flows, filters |
-| OAT daily clean prices (BGN) and yields | BDH | the cross-section |
-| Amount outstanding history | bulk field `AMOUNT_OUTSTANDING_HISTORY` | bond-specific factor |
-| €STR fixing, €STR OIS (EONIA OIS − 8.5bp before Oct 2019) | BDH | risk-free curve |
-| France sovereign CDS 1-10Y (USD, CR14) | BDH | implied vs traded basis |
-| French GC repo | BDH | funding adjustment |
-| Bund and OAT generic yields | BDH | benchmark |
+**The data is not in this repository**: Bloomberg's terms do not allow republishing it (`data/` is git-ignored).
+Re-pull it with `scripts/bloomberg/`. Not available on the terminal used: French GC repo history, per-bond repo
+rates, ECB holdings per ISIN.
 
-Second pull (`scripts/fetch_extra.py`, 24 Nov 2026):
+## Simplifications and limits
 
-| Item | Coverage | Use |
-|---|---|---|
-| OAT bid/ask, bid/ask yields, Bloomberg Z-spread and ASW (all 117 OATs, daily) | 2010-2026 | transaction costs, validation of own Z-spread |
-| Bunds DBR/OBL/BKO (218 bonds), BTPs (235, semi-annual), Bonos (127): static + PX_LAST/BID/ASK/YLD | 2010-2026 | Germany baseline, cross-country extension |
-| STOXX GC Pooling EUR (ON, TN, 1W-12M), French BTF bills 1M-1Y, €STR compounded, Bubill indices | 2010-2026 | funding / collateral-scarcity proxies |
-| ECB DFR/MRO, Euribor 3M/6M, EUR 6M swaps 2-30Y | 2010-2026 | policy regime, asset-swap curve |
-| Generic yields FR 7/15/20, DE 7/15/20, IT and ES 2/5/10/30 | 2010-2026 | curve benchmarks |
-| Sovereign CDS USD 5/10Y Germany, Italy, Spain, Belgium, Netherlands; France 2/4/20/30Y, EUR 1/2Y | varies | CDS-bond basis, cross-country |
-| iTraxx Main / Crossover, V2X, VIX, MOVE, SX5E, CAC, futures OAT/Bund/Bobl/Buxl/BTP | 2010-2026 | stress regimes, controls |
-
-Not available on the Dauphine terminal: French GC repo history (RepoFunds Rate France, broker GC series: not entitled), per-bond repo/specialness, ECB holdings per ISIN.
-GC Pooling (ECB basket) sits within a few bp of €STR, so it does not capture OAT scarcity; `--funding --funding-src btf3m` uses 3M BTF minus €STR instead.
-
-Bloomberg data stays local (`data/` is git-ignored): Bloomberg's terms do not allow republishing it.
-
-## Simplifications (v1) and known limits
-
-- Fixed-coupon nominal annual OATs only (no OATi/€i). Coupon dates are maturity anniversaries; irregular first coupons, holidays and business-day rolls are ignored.
-- Discounting on ACT/365 times; OIS on ACT/360; default independent of rates.
-- Recovery fixed (40%) and on face value. λ and R trade off; run the recovery sensitivity.
-- Everything that is not credit (liquidity, repo specialness, free float, CTD status) loads onto λ or into the residuals.
-- CDS is USD-denominated while bonds are EUR: the CDS-bond basis includes redenomination / quanto effects.
-- ECB holdings per ISIN are not published (only aggregates), so v1 uses amount outstanding as the bond-specific factor.
+- Fixed-coupon nominal annual OATs only. Coupon dates are maturity anniversaries; irregular first coupons, holidays
+  and business-day rolls are ignored. BTPs (semi-annual) need the pricer extended before the cross-country step.
+- ACT/365 discounting times, ACT/360 OIS; default independent of rates; recovery of face value.
+- Everything that is not credit (liquidity, specialness, supply, CTD status) loads onto λ or the residuals.
+- Traded CDS is USD-denominated: the basis includes redenomination / quanto effects.
 - Long/short P&L is residual compression in bp of yield, DV01-neutral, without carry, roll or transaction costs.
 
 ## Next steps
 
-1. Run on real data; check the QE breakdown and the funding fix.
-2. Extend to BTPs and Bonos (wider spreads, where the coupon effect should be stronger).
-3. Explain residuals with bond-specific factors (amount outstanding, age, repo specialness proxy).
-4. Proper backtest with carry/roll and bid-ask.
-
-## Result sheet (LaTeX)
-
-```bash
-python scripts/make_report.py --tag R40 --compare R40_funding
-# synthetic: python scripts/make_report.py --tag synth --compare synth_funding --raw data/synthetic --synthetic
-```
-
-Writes `reports/<tag>/results.tex` (+ `results.pdf` if pdflatex is installed) with: market inputs and the
-full OAT cross-section on the last date (also as `data_snapshot.csv`), fitted hazard curve, implied vs traded
-CDS, fit quality by regime, funding-adjusted comparison, and the signal comparison table.
+1. Daily fits and a proper backtest with carry, roll and bid/ask costs.
+2. Explain residuals with bond-specific factors (amount outstanding, age, CTD, BTF-based scarcity).
+3. Extend the pricer to semi-annual coupons; run BTPs and Bonos, use Bunds as the risk-free leg.

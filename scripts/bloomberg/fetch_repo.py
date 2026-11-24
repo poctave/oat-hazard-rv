@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fetch_bloomberg import BBG  # noqa: E402
 
 CANDS = {"repo_gc_fr_oat_on": "RB00049V Mmkt", "repo_gc_fr_on": "RB00048Y Mmkt",
